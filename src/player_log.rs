@@ -9,6 +9,7 @@ use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use phf::phf_map;
+use rayon::iter::{ParallelBridge, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -229,7 +230,21 @@ impl PlayerLogSerializer {
     fn serialization_helper<W: Write>(logs: &[PlayerLog], writer: &mut W) -> anyhow::Result<()> {
         writer.write_u64::<BigEndian>(logs.len() as u64)?;
 
-        logs.iter().try_for_each(|log| log.serialize(writer))?;
+        // I hate this
+        let log_buffers = logs
+            .chunks((logs.len() / 10).max(1))
+            .par_bridge()
+            .map(|c| -> Result<Vec<u8>> {
+                let mut buf = Vec::with_capacity(c.len() * 128);
+
+                c.iter().try_for_each(|log| log.serialize(&mut buf))?;
+                Ok(buf)
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        log_buffers
+            .iter()
+            .try_for_each(|buf| writer.write_all(buf))?;
 
         Ok(())
     }

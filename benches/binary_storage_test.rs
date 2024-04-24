@@ -1,5 +1,6 @@
 use binary_storage_test::{player_log::*, *};
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
+use flate2::Compression;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("Serialization");
@@ -68,11 +69,34 @@ fn criterion_benchmark(c: &mut Criterion) {
                     .collect::<Vec<PlayerLog>>()
             },
             |data| {
-                // let serialized = serialize_vec(&data).unwrap();
-                // let deserialized = deserialize_vec(&serialized).unwrap();
-                // assert_eq!(data, deserialized);
-                // serialized.len()
-                0
+                let serialized = PlayerLogSerializer::serialize_many(&data).unwrap();
+                let deserialized: Vec<PlayerLog> =
+                    PlayerLogSerializer::deserialize_many(&serialized).unwrap();
+
+                assert_eq!(data, deserialized);
+                serialized.len()
+            },
+            BatchSize::NumBatches(size),
+        )
+    });
+
+    group.bench_with_input("our_serialization_compressed", &10_000, |b, &size| {
+        b.iter_batched(
+            || {
+                (0..size)
+                    .into_iter()
+                    .map(|_| log_generator().build().unwrap())
+                    .collect::<Vec<PlayerLog>>()
+            },
+            |data| {
+                let serialized =
+                    PlayerLogSerializer::serialize_many_compressed(&data, Compression::default())
+                        .unwrap();
+                let deserialized: Vec<PlayerLog> =
+                    PlayerLogSerializer::deserialize_many_compressed(&serialized).unwrap();
+
+                assert_eq!(data, deserialized);
+                serialized.len()
             },
             BatchSize::NumBatches(size),
         )
