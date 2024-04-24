@@ -23,6 +23,7 @@ bytesize = "1.3.0"
 humantime = "2.1.0"
 rand = "0.8.5"
 rayon = "1.10.0"
+flate2 = "1.0.28"
 
 [dev-dependencies]
 criterion = { version = "0.4", features = ["html_reports"] }
@@ -30,3 +31,11 @@ criterion = { version = "0.4", features = ["html_reports"] }
 [[bench]]
 name = "binary_storage_test"
 harness = false
+
+[lints.clippy]
+all = "warn"
+# restriction = "warn"
+# pedantic = "warn"
+nursery = "warn"
+# cargo = "warn"
+module_name_repetitions = "allow"

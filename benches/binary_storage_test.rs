@@ -68,8 +68,8 @@ fn criterion_benchmark(c: &mut Criterion) {
                     .collect::<Vec<PlayerLog>>()
             },
             |data| {
-                let serialized = serialize_vec(&data);
-                let deserialized = deserialize_vec(&serialized);
+                let serialized = serialize_vec(&data).unwrap();
+                let deserialized = deserialize_vec(&serialized).unwrap();
                 assert_eq!(data, deserialized);
                 serialized.len()
             },

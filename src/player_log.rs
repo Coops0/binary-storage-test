@@ -1,37 +1,39 @@
-use std::io::Cursor;
 use std::net::Ipv4Addr;
 
 use anyhow::Result;
 use anyhow::{bail, Context};
 use bitflags::bitflags;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use flate2::read::ZlibDecoder;
+use flate2::write::ZlibEncoder;
+use flate2::Compression;
 use phf::phf_map;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-pub fn serialize_vec(logs: &Vec<PlayerLog>) -> Vec<u8> {
-    let mut serialized = vec![];
-    serialized
-        .write_u64::<BigEndian>(logs.len() as u64)
-        .unwrap();
+pub fn serialize_vec(logs: &Vec<PlayerLog>) -> Result<Vec<u8>> {
+    let mut e = ZlibEncoder::new(Vec::new(), Compression::best());
+
+    e.write_u64::<BigEndian>(logs.len() as u64).unwrap();
 
     for log in logs {
-        log.serialize(&mut serialized).unwrap();
+        log.serialize(&mut e).unwrap();
     }
 
-    serialized
+    e.finish().map_err(Into::into)
 }
 
-pub fn deserialize_vec(serialized: &[u8]) -> Vec<PlayerLog> {
-    let mut cursor = Cursor::new(serialized);
-    let len = cursor.read_u64::<BigEndian>().unwrap() as usize;
+pub fn deserialize_vec(serialized: &[u8]) -> Result<Vec<PlayerLog>> {
+    let mut d = ZlibDecoder::new(serialized);
+
+    let len = d.read_u64::<BigEndian>()? as usize;
 
     let mut logs = Vec::with_capacity(len);
     for _ in 0..len {
-        logs.push(PlayerLog::deserialize(&mut cursor).unwrap());
+        logs.push(PlayerLog::deserialize(&mut d)?);
     }
 
-    logs
+    Ok(logs)
 }
 
 pub static VERSIONS: phf::Map<&'static str, u8> = phf_map! {
@@ -109,7 +111,7 @@ impl PlayerLogBuilder {
         })
     }
 
-    pub fn from_log(log: &PlayerLog) -> Result<PlayerLogBuilder> {
+    pub fn from_log(log: &PlayerLog) -> Result<Self> {
         let flags = LogFlags::from_bits(log.flags).context("invalid flags")?;
 
         let player_uuid = log.player_uuid.map(Uuid::from_bytes);
@@ -130,12 +132,12 @@ impl PlayerLogBuilder {
             .0
             .to_string();
 
-        Ok(PlayerLogBuilder {
+        Ok(Self {
             flags,
             player_uuid,
             player_name,
-            player_ip: Ipv4Addr::from(player_ip),
-            server_ip: Ipv4Addr::from(server_ip),
+            player_ip,
+            server_ip,
             server_port: log.server_port,
             server_domain,
             server_version,

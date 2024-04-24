@@ -50,6 +50,6 @@ pub fn log_generator() -> PlayerLogBuilder {
         server_ip: rand_ip(rng),
         server_port: rng.gen::<u16>(),
         server_domain: rand_string(rng.gen_range(4..255)),
-        server_version: VERSIONS.entries().choose(rng).unwrap().0.to_string(),
+        server_version: (*VERSIONS.entries().choose(rng).unwrap().0).to_string(),
     }
 }
