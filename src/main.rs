@@ -3,9 +3,10 @@ use std::{env, mem::size_of_val, time::Instant};
 use anyhow::Result;
 use binary_storage_test::{
     log_generator,
-    player_log::{deserialize_vec, serialize_vec, PlayerLog, PlayerLogBuilder},
+    player_log::{PlayerLog, PlayerLogBuilder, PlayerLogSerializer},
 };
 use bytesize::ByteSize;
+use flate2::Compression;
 use humantime::format_duration;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
@@ -13,7 +14,7 @@ fn main() {
     env::set_var("RUST_BACKTRACE", "1");
 
     let before_generation = Instant::now();
-    let logs: Vec<PlayerLog> = (0..100_000)
+    let logs: Vec<PlayerLog> = (0..500_000)
         .into_par_iter()
         .map(|_| log_generator().build().unwrap())
         .collect();
@@ -80,11 +81,29 @@ fn main() {
     {
         let instant = Instant::now();
 
-        let serialized = serialize_vec(&logs).unwrap();
-        let deserialized: Vec<PlayerLog> = deserialize_vec(&serialized).unwrap();
+        let serialized = PlayerLogSerializer::serialize_many(&logs).unwrap();
+        let deserialized: Vec<PlayerLog> =
+            PlayerLogSerializer::deserialize_many(&serialized).unwrap();
 
         println!(
             "our_serialization: {}µs, {}",
+            format_duration(instant.elapsed()),
+            ByteSize(serialized.len() as u64)
+        );
+
+        assert_eq!(logs, deserialized);
+    }
+
+    {
+        let instant = Instant::now();
+
+        let serialized =
+            PlayerLogSerializer::serialize_many_compressed(&logs, Compression::new(5)).unwrap();
+        let deserialized: Vec<PlayerLog> =
+            PlayerLogSerializer::deserialize_many_compressed(&serialized).unwrap();
+
+        println!(
+            "our_serialization compressed: {}µs, {}",
             format_duration(instant.elapsed()),
             ByteSize(serialized.len() as u64)
         );

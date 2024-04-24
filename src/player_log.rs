@@ -1,3 +1,4 @@
+use std::io::{Read, Write};
 use std::net::Ipv4Addr;
 
 use anyhow::Result;
@@ -10,31 +11,6 @@ use flate2::Compression;
 use phf::phf_map;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-
-pub fn serialize_vec(logs: &Vec<PlayerLog>) -> Result<Vec<u8>> {
-    let mut e = ZlibEncoder::new(Vec::new(), Compression::best());
-
-    e.write_u64::<BigEndian>(logs.len() as u64).unwrap();
-
-    for log in logs {
-        log.serialize(&mut e).unwrap();
-    }
-
-    e.finish().map_err(Into::into)
-}
-
-pub fn deserialize_vec(serialized: &[u8]) -> Result<Vec<PlayerLog>> {
-    let mut d = ZlibDecoder::new(serialized);
-
-    let len = d.read_u64::<BigEndian>()? as usize;
-
-    let mut logs = Vec::with_capacity(len);
-    for _ in 0..len {
-        logs.push(PlayerLog::deserialize(&mut d)?);
-    }
-
-    Ok(logs)
-}
 
 pub static VERSIONS: phf::Map<&'static str, u8> = phf_map! {
     "1.8" => 1,
@@ -229,5 +205,51 @@ impl PlayerLog {
             server_domain,
             server_version,
         })
+    }
+}
+
+pub struct PlayerLogSerializer;
+
+impl PlayerLogSerializer {
+    pub fn serialize_many(logs: &[PlayerLog]) -> Result<Vec<u8>> {
+        let mut writer = Vec::with_capacity(logs.len() * 128);
+        Self::serialization_helper(logs, &mut writer)?;
+
+        Ok(writer)
+    }
+
+    pub fn serialize_many_compressed(logs: &[PlayerLog], level: Compression) -> Result<Vec<u8>> {
+        let mut e = ZlibEncoder::new(Vec::with_capacity(logs.len() * 128), level);
+
+        Self::serialization_helper(logs, &mut e)?;
+
+        e.finish().map_err(Into::into)
+    }
+
+    fn serialization_helper<W: Write>(logs: &[PlayerLog], writer: &mut W) -> anyhow::Result<()> {
+        writer.write_u64::<BigEndian>(logs.len() as u64)?;
+
+        logs.iter().try_for_each(|log| log.serialize(writer))?;
+
+        Ok(())
+    }
+
+    pub fn deserialize_many(data: &[u8]) -> Result<Vec<PlayerLog>> {
+        let mut reader = std::io::Cursor::new(data);
+        Self::deserialize_helper(&mut reader)
+    }
+
+    pub fn deserialize_many_compressed(data: &[u8]) -> Result<Vec<PlayerLog>> {
+        let mut reader = ZlibDecoder::new(data);
+        Self::deserialize_helper(&mut reader)
+    }
+
+    fn deserialize_helper<R: Read>(reader: &mut R) -> Result<Vec<PlayerLog>> {
+        let len = reader.read_u64::<BigEndian>()?;
+        let logs = (0..len)
+            .map(|_| PlayerLog::deserialize(reader))
+            .collect::<Result<Vec<PlayerLog>>>()?;
+
+        Ok(logs)
     }
 }
