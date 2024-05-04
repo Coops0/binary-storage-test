@@ -37,4 +37,9 @@ all = "warn"
 # restriction = "warn"
 # pedantic = "warn"
 nursery = "warn"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
 # cargo = "warn"
